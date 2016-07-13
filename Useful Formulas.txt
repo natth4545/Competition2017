@@ -1,0 +1,21 @@
+x' = v0 * cos(theta)
+y' = v0 * sin(theta)
+theta = angle
+
+x' = R/2(vr + vl)cos(angle) // vr and vl are velocities of right and left wheel
+y' = R/2(vr + vl)sin(angle)
+angle = R/L(vr - vl) // R is radius of wheel and L is width
+
+w = angle
+
+vr = (2v + wL)/2R
+vl = (2v - wL)/2R
+
+how to find angle = arctan((ygoal - y)/(xgoal - x)
+Remember to make K big for w = K(angle to goal - angle)
+
+angle = angle(obstacle) + (pi)
+// Pure avoidance
+
+angle = angle(obstacle) +- (pi/2)
+// Perpendicular to obstacle
