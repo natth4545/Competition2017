@@ -1,9 +1,13 @@
 #include "WPILib.h"
+#include "AHRS.h"
+#include <math.h>
 #include <memory>
+
+#define PI 3.14159265
 
 using std::shared_ptr;
 
-class Robot: public IterativeRobot
+class Robot: public IterativeRobot, public PIDOutput
 {
 
 private:
@@ -33,6 +37,9 @@ private:
 	Joystick *controlJoystick = new Joystick(2);
 
   PowerDistributionPanel *pdp = new PowerDistributionPanel(0);
+
+	AHRS *ahrs;
+	PIDController *turnController;
 
 	void RobotInit()
 	{
@@ -67,10 +74,10 @@ private:
 		turnWheel1->SetExpiration(200000);
 		camMotor->SetExpiration(200000);
 
-		moveWheel1->SetControlMode(CANTalon::ControlMode::kSpeed);
-		moveWheel2->SetControlMode(CANTalon::ControlMode::kSpeed);
-		moveWheel3->SetControlMode(CANTalon::ControlMode::kSpeed);
-		moveWheel4->SetControlMode(CANTalon::ControlMode::kSpeed);
+		moveWheel1->SetControlMode(CANTalon::ControlMode::kVoltage);
+		moveWheel2->SetControlMode(CANTalon::ControlMode::kVoltage);
+		moveWheel3->SetControlMode(CANTalon::ControlMode::kVoltage);
+		moveWheel4->SetControlMode(CANTalon::ControlMode::kVoltage);
 		turnWheel1->SetControlMode(CANTalon::ControlMode::kPosition);
 		turnWheel2->SetControlMode(CANTalon::ControlMode::kPosition);
 		turnWheel3->SetControlMode(CANTalon::ControlMode::kPosition);
@@ -96,6 +103,33 @@ private:
     turnWheel3->EnableControl();
     turnWheel4->EnableControl();
 		camMotor->EnableControl();
+
+		//Gyroscope stuff
+		try {
+			/* Communicate w/navX-MXP via the MXP SPI Bus.                                       */
+			/* Alternatively:  I2C::Port::kMXP, SerialPort::Port::kMXP or SerialPort::Port::kUSB */
+			/* See http://navx-mxp.kauailabs.com/guidance/selecting-an-interface/ for details.   */
+			ahrs = new AHRS(SPI::Port::kMXP);
+		} catch (std::exception ex) {
+			std::string err_string = "Error instantiating navX-MXP:  ";
+			err_string += ex.what();
+			//DriverStation::ReportError(err_string.c_str());
+		}
+
+		if (ahrs) {
+			LiveWindow::GetInstance()->AddSensor("IMU", "Gyro", ahrs);
+			ahrs->ZeroYaw();
+
+			// Kp	  Ki	 Kd		Kf    PIDSource PIDoutput
+			/*
+			turnController = new PIDController(0.015f, 0.003f, 0.100f, 0.00f,
+					ahrs, this);
+			turnController->SetInputRange(-180.0f, 180.0f);
+			turnController->SetOutputRange(-1.0, 1.0);
+			turnController->SetAbsoluteTolerance(2); //tolerance in degrees
+			turnController->SetContinuous(true);
+			*/
+		}
 	}
 
 
@@ -108,6 +142,11 @@ private:
 	 * You can add additional auto modes by adding additional comparisons to the if-else structure below with additional strings.
 	 * If using the SendableChooser make sure to add them to the chooser code above as well.
 	 */
+	double rotateRate = 0;
+	void PIDWrite(float output) { // Implement PIDOutput
+		rotateRate = output;
+	}
+
     int currentState = 1;
     int autoSelected = 0;
 	Timer *timer = new Timer();
@@ -159,20 +198,104 @@ private:
 
 	}
 
-	void TeleopPeriodic()
+	void TeleopPeriodic() override
 	{
+			float temp, theta, xRate, yRate, rotateRate; // values of forward movement and rotary movement
+			float A,B,C,D; //math variables
+			float ws1,ws2,ws3,ws4; // wheel speeds
+			float wa1,wa2,wa3,wa4; // wheel angles
+			float cwa1,cwa2,cwa3,cwa4; // current wheel angles
+			bool r1,r2,r3,r4; // this is if we need to turn the wheel a lot
+			//for example, if you need to do a 180 it's easier to reverse
+			float max; // some more wheel balancing math
+			/*
+			1 - 4 are quadrants 1 - 4 respectively
+			*/
+
+			xRate = rightJoystick->GetX(); // Get values of movement
+			yRate = rightJoystick->GetY() * -1;
+			rotateRate = leftJoystick->GetX();
+
+			float multiplier; // TURBO modo
+			if(rightJoystick->GetRawButton(1))
+			{
+				multiplier = 1;
+			} else {
+				multiplier = .65;
+			}
+
+			// temp
+			// FWD = yRate STR = xRate
+			theta = ahrs->GetYaw();
+			theta = theta * PI / 180.0; // degrees to radians
+
+			temp = yRate * cos(theta) + xRate * sin(theta);
+			xRate = -1 * yRate * sin(theta) + xRate * cos(theta);
+			yRate = temp;
+
+			A = xRate - rotateRate;
+			B = xRate + rotateRate;
+			C = yRate - rotateRate;
+			D = yRate + rotateRate;
+
+			ws1 = sqrt(pow(B,2.0) + pow(C,2.0));
+			ws2 = sqrt(pow(B,2.0) + pow(D,2.0));
+			ws3 = sqrt(pow(A,2.0) + pow(D,2.0));
+			ws4 = sqrt(pow(A,2.0) + pow(C,2.0));
+
+			wa1 = atan2(B, C) * (180/PI);
+			wa2 = atan2(B, D) * (180/PI);
+			wa3 = atan2(A, D) * (180/PI);
+			wa4 = atan2(A, C) * (180/PI);
+
+			max = ws1;
+			if(ws2 > max)
+			{
+				max = ws2;
+			}
+			if(ws3 > max)
+			{
+				max = ws3;
+			}
+			if(ws4 > max)
+			{
+				max = ws4;
+			}
+
+			if(max > 1)
+			{
+				ws1 /= max;
+				ws2 /= max;
+				ws3 /= max;
+				ws4 /= max;
+			}
+
+			//math is done, now we set our motors
+
+			cwa1 = turnWheel1->Get();
+			cwa2 = turnWheel2->Get();
+			cwa3 = turnWheel3->Get();
+			cwa4 = turnWheel4->Get();
+
+			
+
+			turnWheel1->Set(wa1);
+			turnWheel2->Set(wa2);
+			turnWheel3->Set(wa3);
+			turnWheel4->Set(wa4);
+
+			moveWheel1->Set(ws1 * multiplier);
+			moveWheel2->Set(ws2 * multiplier);
+			moveWheel3->Set(ws3 * multiplier);
+			moveWheel4->Set(ws4 * multiplier);
 
 	}
 
 	void DisabledPeriodic() override
 	{
-
+			UpdateDashboard();
 	}
 
-  void calibrate()
-  {
-
-  }
 	void UpdateDashboard()
 	{
 
