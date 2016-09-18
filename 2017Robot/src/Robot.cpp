@@ -198,15 +198,18 @@ private:
 
 	}
 
+	bool dMode = true; // true is true swerve, false is robot oriented swerve
+	bool r1 = false,r2 = false,r3 = false,r4 = false; // this is if we need to turn the wheel a lot
+	//for example, if you need to do a 180 it's easier to reverse
+
 	void TeleopPeriodic() override
 	{
 			float temp, theta, xRate, yRate, rotateRate; // values of forward movement and rotary movement
 			float A,B,C,D; //math variables
 			float ws1,ws2,ws3,ws4; // wheel speeds
 			float wa1,wa2,wa3,wa4; // wheel angles
+			float camAng; // camera angle
 			float cwa1,cwa2,cwa3,cwa4; // current wheel angles
-			bool r1,r2,r3,r4; // this is if we need to turn the wheel a lot
-			//for example, if you need to do a 180 it's easier to reverse
 			float max; // some more wheel balancing math
 			/*
 			1 - 4 are quadrants 1 - 4 respectively
@@ -228,6 +231,9 @@ private:
 			// FWD = yRate STR = xRate
 			theta = ahrs->GetYaw();
 			theta = theta * PI / 180.0; // degrees to radians
+			/*
+			TODO: manual math to calculate current angle of robot to do checking aginst gyro
+			*/
 
 			temp = yRate * cos(theta) + xRate * sin(theta);
 			xRate = -1 * yRate * sin(theta) + xRate * cos(theta);
@@ -243,10 +249,10 @@ private:
 			ws3 = sqrt(pow(A,2.0) + pow(D,2.0));
 			ws4 = sqrt(pow(A,2.0) + pow(C,2.0));
 
-			wa1 = atan2(B, C) * (180/PI);
-			wa2 = atan2(B, D) * (180/PI);
-			wa3 = atan2(A, D) * (180/PI);
-			wa4 = atan2(A, C) * (180/PI);
+			wa1 = atan2(B, C) * (180/PI) % 360;
+			wa2 = atan2(B, D) * (180/PI) % 360;
+			wa3 = atan2(A, D) * (180/PI) % 360;
+			wa4 = atan2(A, C) * (180/PI) % 360;
 
 			max = ws1;
 			if(ws2 > max)
@@ -277,7 +283,34 @@ private:
 			cwa3 = turnWheel3->Get();
 			cwa4 = turnWheel4->Get();
 
-			
+			// need logic to make turning wheels more efficient
+			// here we turn the angle of the wheel around and reverse the move motors
+			// TODO: more logic is needed to help reverse wheel angle motors maybe
+
+			if(abs(wa1-cwa1) > 90 && abs(wa1-cwa1) < 270)
+			{
+				wa1 = wa1 + 180 % 360; // reverse the angle
+				r1 = !r1;
+				moveWheel1->SetInverted(r1);
+			}
+			if(abs(wa2-cwa2) > 90 && abs(wa2-cwa2) < 270)
+			{
+				wa2 = wa2 + 180 % 360; // reverse the angle
+				r2 = !r2;
+				moveWheel1->SetInverted(r2);
+			}
+			if(abs(wa3-cwa3) > 90 && abs(wa3-cwa3) < 270)
+			{
+				wa3 = wa3 + 180 % 360; // reverse the angle
+				r3 = !r3;
+				moveWheel1->SetInverted(r3);
+			}
+			if(abs(wa4-cwa4) > 90 && abs(wa4-cwa4) < 270)
+			{
+				wa4 = wa4 + 180 % 360; // reverse the angle
+				r4 = !r4;
+				moveWheel1->SetInverted(r4);
+			}
 
 			turnWheel1->Set(wa1);
 			turnWheel2->Set(wa2);
@@ -289,6 +322,7 @@ private:
 			moveWheel3->Set(ws3 * multiplier);
 			moveWheel4->Set(ws4 * multiplier);
 
+			camMotor->Set(-1 * theta); // currently in mode field centric, I'll do more logic later
 	}
 
 	void DisabledPeriodic() override
