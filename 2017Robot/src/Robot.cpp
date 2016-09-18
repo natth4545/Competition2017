@@ -74,24 +74,26 @@ private:
 		turnWheel1->SetExpiration(200000);
 		camMotor->SetExpiration(200000);
 
-		moveWheel1->SetControlMode(CANTalon::ControlMode::kVoltage);
-		moveWheel2->SetControlMode(CANTalon::ControlMode::kVoltage);
-		moveWheel3->SetControlMode(CANTalon::ControlMode::kVoltage);
-		moveWheel4->SetControlMode(CANTalon::ControlMode::kVoltage);
+		moveWheel1->SetControlMode(CANTalon::ControlMode::kPercentVbus);
+		moveWheel2->SetControlMode(CANTalon::ControlMode::kPercentVbus);
+		moveWheel3->SetControlMode(CANTalon::ControlMode::kPercentVbus);
+		moveWheel4->SetControlMode(CANTalon::ControlMode::kPercentVbus);
 		turnWheel1->SetControlMode(CANTalon::ControlMode::kPosition);
 		turnWheel2->SetControlMode(CANTalon::ControlMode::kPosition);
 		turnWheel3->SetControlMode(CANTalon::ControlMode::kPosition);
 		turnWheel4->SetControlMode(CANTalon::ControlMode::kPosition);
 		camMotor->SetControlMode(CANTalon::ControlMode::kPosition);
 
+		/*
 		moveWheel1->SetFeedbackDevice(CANTalon::FeedbackDevice::QuadEncoder);
 		moveWheel2->SetFeedbackDevice(CANTalon::FeedbackDevice::QuadEncoder);
 		moveWheel3->SetFeedbackDevice(CANTalon::FeedbackDevice::QuadEncoder);
 		moveWheel4->SetFeedbackDevice(CANTalon::FeedbackDevice::QuadEncoder);
-		turnWheel1->SetFeedbackDevice(CANTalon::FeedbackDevice::QuadEncoder);
-		turnWheel2->SetFeedbackDevice(CANTalon::FeedbackDevice::QuadEncoder);
-		turnWheel3->SetFeedbackDevice(CANTalon::FeedbackDevice::QuadEncoder);
-		turnWheel4->SetFeedbackDevice(CANTalon::FeedbackDevice::QuadEncoder);
+		*/
+		turnWheel1->SetFeedbackDevice(CANTalon::FeedbackDevice::AnalogEncoder);
+		turnWheel2->SetFeedbackDevice(CANTalon::FeedbackDevice::AnalogEncoder);
+		turnWheel3->SetFeedbackDevice(CANTalon::FeedbackDevice::AnalogEncoder);
+		turnWheel4->SetFeedbackDevice(CANTalon::FeedbackDevice::AnalogEncoder);
 		camMotor->SetFeedbackDevice(CANTalon::FeedbackDevice::QuadEncoder);
 
 		moveWheel1->EnableControl();
@@ -201,6 +203,8 @@ private:
 	bool dMode = true; // true is true swerve, false is robot oriented swerve
 	bool r1 = false,r2 = false,r3 = false,r4 = false; // this is if we need to turn the wheel a lot
 	//for example, if you need to do a 180 it's easier to reverse
+	//int p1=0,p2=0,p3=0,p4=0; // position of wheel angle motors to track their position
+	float currentAngle = 0, angleDerivative; // manual math
 
 	void TeleopPeriodic() override
 	{
@@ -234,6 +238,8 @@ private:
 			/*
 			TODO: manual math to calculate current angle of robot to do checking aginst gyro
 			*/
+
+
 
 			temp = yRate * cos(theta) + xRate * sin(theta);
 			xRate = -1 * yRate * sin(theta) + xRate * cos(theta);
@@ -278,10 +284,12 @@ private:
 
 			//math is done, now we set our motors
 
-			cwa1 = turnWheel1->Get();
-			cwa2 = turnWheel2->Get();
-			cwa3 = turnWheel3->Get();
-			cwa4 = turnWheel4->Get();
+			//ANALOG ENCODERS NEED TO HAVE THEIR POSITION TRACKED BECAUSE THEY ARE CONTINUOUS
+			// maybe % 360 will work
+			cwa1 = turnWheel1->Get() % 360;
+			cwa2 = turnWheel2->Get() % 360;
+			cwa3 = turnWheel3->Get() % 360;
+			cwa4 = turnWheel4->Get() % 360;
 
 			// need logic to make turning wheels more efficient
 			// here we turn the angle of the wheel around and reverse the move motors
@@ -312,15 +320,25 @@ private:
 				moveWheel1->SetInverted(r4);
 			}
 
-			turnWheel1->Set(wa1);
+			// convert wheel angles in degrees to encoder values
+			// 0-359 degrees -> 0-1023 encoder ticks
+
+			wa1 = wa1/360 * 1023;
+			wa2 = wa2/360 * 1023;
+			wa3 = wa3/360 * 1023;
+			wa4 = wa4/360 * 1023;
+
+			turnWheel1->Set(wa1); // setting our turn wheel motors
 			turnWheel2->Set(wa2);
 			turnWheel3->Set(wa3);
 			turnWheel4->Set(wa4);
 
-			moveWheel1->Set(ws1 * multiplier);
+			moveWheel1->Set(ws1 * multiplier); // setting our move motors
 			moveWheel2->Set(ws2 * multiplier);
 			moveWheel3->Set(ws3 * multiplier);
 			moveWheel4->Set(ws4 * multiplier);
+
+			motorSpeed();
 
 			camMotor->Set(-1 * theta); // currently in mode field centric, I'll do more logic later
 	}
@@ -334,6 +352,15 @@ private:
 	{
 
 	}
+
+	void motorSpeed()
+	{
+		float voltage = moveWheel1->GetBusVoltage();
+		double speed = moveWheel1->GetSpeed();
+
+		printf("%d / %f", speed, voltage);
+	}
+
 	void TestPeriodic()
 	{
 		lw->Run();
