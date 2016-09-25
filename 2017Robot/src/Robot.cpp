@@ -100,10 +100,10 @@ private:
 		moveWheel2->EnableControl();
 		moveWheel3->EnableControl();
 		moveWheel4->EnableControl();
-    turnWheel1->EnableControl();
-    turnWheel2->EnableControl();
-    turnWheel3->EnableControl();
-    turnWheel4->EnableControl();
+    		turnWheel1->EnableControl();
+    		turnWheel2->EnableControl();
+    		turnWheel3->EnableControl();
+    		turnWheel4->EnableControl();
 		camMotor->EnableControl();
 
 		//Gyroscope stuff
